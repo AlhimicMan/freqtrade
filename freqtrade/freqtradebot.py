@@ -423,6 +423,7 @@ class FreqtradeBot(LoggingMixin):
         (buy, sell) = self.strategy.get_signal(pair, self.strategy.timeframe, analyzed_df)
 
         if buy and not sell:
+            buy_price, sell_price = self.strategy.get_price(pair, self.strategy.timeframe, analyzed_df)
             stake_amount = self.wallets.get_trade_stake_amount(pair, self.edge)
             if not stake_amount:
                 logger.debug(f"Stake amount is 0, ignoring possible trade for {pair}.")
@@ -431,15 +432,16 @@ class FreqtradeBot(LoggingMixin):
             logger.info(f"Buy signal found: about create a new trade for {pair} with stake_amount: "
                         f"{stake_amount} ...")
 
+            # TODO: customize bid_strategy for getting custom prices from analysed dataframe
             bid_check_dom = self.config.get('bid_strategy', {}).get('check_depth_of_market', {})
             if ((bid_check_dom.get('enabled', False)) and
                     (bid_check_dom.get('bids_to_ask_delta', 0) > 0)):
                 if self._check_depth_of_market_buy(pair, bid_check_dom):
-                    return self.execute_buy(pair, stake_amount)
+                    return self.execute_buy(pair, stake_amount, buy_price)
                 else:
                     return False
 
-            return self.execute_buy(pair, stake_amount)
+            return self.execute_buy(pair, stake_amount, buy_price)
         else:
             return False
 
@@ -473,6 +475,8 @@ class FreqtradeBot(LoggingMixin):
         Executes a limit buy for the given pair
         :param pair: pair for which we want to create a LIMIT_BUY
         :param stake_amount: amount of stake-currency for the pair
+        :param price:
+        :param forcebuy:
         :return: True if a buy order is created, false if it fails.
         """
         time_in_force = self.strategy.order_time_in_force['buy']

@@ -9,11 +9,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Union
 
 import arrow
+import pandas as pd
 from pandas import DataFrame
 
 from freqtrade.constants import ListPairsWithTimeframes
 from freqtrade.data.dataprovider import DataProvider
-from freqtrade.enums import SellType, SignalType
+from freqtrade.enums import SellType, SignalType, SignalPrice
 from freqtrade.exceptions import OperationalException, StrategyError
 from freqtrade.exchange import timeframe_to_minutes, timeframe_to_seconds
 from freqtrade.exchange.exchange import timeframe_to_next_date
@@ -478,18 +479,10 @@ class IStrategy(ABC, HyperStrategyMixin):
             else:
                 raise StrategyError(message)
 
-    def get_signal(self, pair: str, timeframe: str, dataframe: DataFrame) -> Tuple[bool, bool]:
-        """
-        Calculates current signal based based on the buy / sell columns of the dataframe.
-        Used by Bot to get the signal to buy or sell
-        :param pair: pair in format ANT/BTC
-        :param timeframe: timeframe to use
-        :param dataframe: Analyzed dataframe to get signal from.
-        :return: (Buy, Sell) A bool-tuple indicating buy/sell signal
-        """
+    def get_latest_timeframe_data(self, pair: str, timeframe: str, dataframe: DataFrame) -> Optional[pd.Series]:
         if not isinstance(dataframe, DataFrame) or dataframe.empty:
             logger.warning(f'Empty candle (OHLCV) data for pair {pair}')
-            return False, False
+            return None
 
         latest_date = dataframe['date'].max()
         latest = dataframe.loc[dataframe['date'] == latest_date].iloc[-1]
@@ -504,8 +497,20 @@ class IStrategy(ABC, HyperStrategyMixin):
                 'Outdated history for pair %s. Last tick is %s minutes old',
                 pair, int((arrow.utcnow() - latest_date).total_seconds() // 60)
             )
-            return False, False
+            return None
+        return latest
 
+    def get_signal(self, pair: str, timeframe: str, dataframe: DataFrame) -> Tuple[bool, bool]:
+        """
+        Calculates current signal based based on the buy / sell columns of the dataframe.
+        Used by Bot to get the signal to buy or sell
+        :param pair: pair in format ANT/BTC
+        :param timeframe: timeframe to use
+        :param dataframe: Analyzed dataframe to get signal from.
+        :return: (Buy, Sell) A bool-tuple indicating buy/sell signal
+        """
+        latest_date = dataframe['date'].max()
+        latest = self.get_latest_timeframe_data(pair, timeframe, dataframe)
         (buy, sell) = latest[SignalType.BUY.value] == 1, latest[SignalType.SELL.value] == 1
         logger.debug('trigger: %s (pair=%s) buy=%s sell=%s',
                      latest['date'], pair, str(buy), str(sell))
@@ -516,6 +521,15 @@ class IStrategy(ABC, HyperStrategyMixin):
                                       buy=buy):
             return False, sell
         return buy, sell
+
+    def get_price(self, pair: str, timeframe: str, dataframe: DataFrame) -> Tuple[float, float]:
+        latest = self.get_latest_timeframe_data(pair, timeframe, dataframe)
+        buy_price = latest[SignalPrice.BUY.value]
+        sell_price = latest[SignalPrice.SELL.value]
+        logger.debug('trigger: %s (pair=%s) buy price=%s sell price=%s',
+                     latest['date'], pair, str(buy_price), str(sell_price))
+
+        return buy_price, sell_price
 
     def ignore_expired_candle(self, latest_date: datetime, current_time: datetime,
                               timeframe_seconds: int, buy: bool):
