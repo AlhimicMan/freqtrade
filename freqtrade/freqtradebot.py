@@ -423,7 +423,6 @@ class FreqtradeBot(LoggingMixin):
         (buy, sell) = self.strategy.get_signal(pair, self.strategy.timeframe, analyzed_df)
 
         if buy and not sell:
-            buy_price, sell_price = self.strategy.get_price(pair, self.strategy.timeframe, analyzed_df)
             stake_amount = self.wallets.get_trade_stake_amount(pair, self.edge)
             if not stake_amount:
                 logger.debug(f"Stake amount is 0, ignoring possible trade for {pair}.")
@@ -432,16 +431,16 @@ class FreqtradeBot(LoggingMixin):
             logger.info(f"Buy signal found: about create a new trade for {pair} with stake_amount: "
                         f"{stake_amount} ...")
 
-            # TODO: customize bid_strategy for getting custom prices from analysed dataframe
             bid_check_dom = self.config.get('bid_strategy', {}).get('check_depth_of_market', {})
             if ((bid_check_dom.get('enabled', False)) and
                     (bid_check_dom.get('bids_to_ask_delta', 0) > 0)):
                 if self._check_depth_of_market_buy(pair, bid_check_dom):
-                    return self.execute_buy(pair, stake_amount, buy_price)
+                    return self.execute_buy(pair, stake_amount)
                 else:
                     return False
-
-            return self.execute_buy(pair, stake_amount, buy_price)
+            ticker = self.exchange.fetch_ticker(pair)
+            strategy_buy_price = self.strategy.calculate_ticker_buy_price(ticker)
+            return self.execute_buy(pair, stake_amount, strategy_buy_price)
         else:
             return False
 
@@ -696,7 +695,11 @@ class FreqtradeBot(LoggingMixin):
             (buy, sell) = self.strategy.get_signal(trade.pair, self.strategy.timeframe, analyzed_df)
 
         logger.debug('checking sell')
-        sell_rate = self.exchange.get_sell_rate(trade.pair, True)
+        ticker = self.exchange.fetch_ticker(trade.pair)
+        sell_rate = self.strategy.calculate_ticker_sell_price(ticker)
+        if sell_rate is None:
+            sell_rate = self.exchange.get_sell_rate(trade.pair, True)
+        logger.debug(f"for pair {trade.pair} determined sell rate: {sell_rate}")
         if self._check_and_execute_sell(trade, sell_rate, buy, sell):
             return True
 
@@ -881,14 +884,19 @@ class FreqtradeBot(LoggingMixin):
                 continue
 
             fully_cancelled = self.update_trade_state(trade, trade.open_order_id, order)
-
+            current_ticker = self.exchange.fetch_ticker(trade.pair)
             if (order['side'] == 'buy' and (order['status'] == 'open' or fully_cancelled) and (
                     fully_cancelled
                     or self._check_timed_out('buy', order)
                     or strategy_safe_wrapper(self.strategy.check_buy_timeout,
                                              default_retval=False)(pair=trade.pair,
                                                                    trade=trade,
-                                                                   order=order))):
+                                                                   order=order)
+                    or strategy_safe_wrapper(self.strategy.check_buy_order_state,
+                                             default_retval=False)(pair=trade.pair,
+                                                                   trade=trade,
+                                                                   order=order,
+                                                                   ticker=current_ticker))):
                 self.handle_cancel_buy(trade, order, constants.CANCEL_REASON['TIMEOUT'])
 
             elif (order['side'] == 'sell' and (order['status'] == 'open' or fully_cancelled) and (
@@ -1133,6 +1141,7 @@ class FreqtradeBot(LoggingMixin):
         profit_rate = trade.close_rate if trade.close_rate else trade.close_rate_requested
         profit_trade = trade.calc_profit(rate=profit_rate)
         # Use cached rates here - it was updated seconds ago.
+
         current_rate = self.exchange.get_sell_rate(trade.pair, False) if not fill else None
         profit_ratio = trade.calc_profit_ratio(profit_rate)
         gain = "profit" if profit_ratio > 0 else "loss"

@@ -180,6 +180,26 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return False
 
+    def check_buy_order_state(self, pair: str, trade: Trade, order: dict, ticker: dict, **kwargs) -> bool:
+        """
+        Check buy order state, if it is required to close this order.
+        It is called whenever a limit buy order has been created,
+        and is not yet fully filled. Here you can check if we must close opened and not executed order because
+        of price changed or buy-timeout.
+
+        Configuration options in `unfilledcheck` will be verified before this,
+        so ensure to set these timeouts high enough.
+
+        When not implemented by a strategy, this simply returns False.
+        :param pair: Pair the trade is for
+        :param trade: trade object.
+        :param order: Order dictionary as returned from CCXT.
+        :param ticker: Current exchange ticker.
+        :param **kwargs: Ensure to keep this here so updates to this won't break your strategy.
+        :return bool: When True is returned, then the buy-order is cancelled.
+        """
+        return False
+
     def check_sell_timeout(self, pair: str, trade: Trade, order: dict, **kwargs) -> bool:
         """
         Check sell timeout function callback.
@@ -522,14 +542,26 @@ class IStrategy(ABC, HyperStrategyMixin):
             return False, sell
         return buy, sell
 
-    def get_price(self, pair: str, timeframe: str, dataframe: DataFrame) -> Tuple[float, float]:
-        latest = self.get_latest_timeframe_data(pair, timeframe, dataframe)
-        buy_price = latest[SignalPrice.BUY.value]
-        sell_price = latest[SignalPrice.SELL.value]
-        logger.debug('trigger: %s (pair=%s) buy price=%s sell price=%s',
-                     latest['date'], pair, str(buy_price), str(sell_price))
+    def calculate_ticker_buy_price(self, ticker: dict) -> Optional[float]:
+        """
+        Custom buy price calculation method.
 
-        return buy_price, sell_price
+        Must be implemented is strategy if custom price calculation required
+        :param ticker: Current exchange ticker
+        :return:
+        """
+        return None
+
+    def calculate_ticker_sell_price(self, ticker: dict) -> Optional[float]:
+        """
+        Custom sell price calculation method.
+
+        Must be implemented is strategy if custom price calculation required
+        :param ticker: Current exchange ticker
+        :return:
+        """
+        return None
+
 
     def ignore_expired_candle(self, latest_date: datetime, current_time: datetime,
                               timeframe_seconds: int, buy: bool):
