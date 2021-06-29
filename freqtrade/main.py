@@ -25,7 +25,7 @@ def main(sysargv: List[str] = None) -> None:
     This function will initiate the bot and start the trading loop.
     :return: None
     """
-
+    print("CUSTOM VERSION!")
     return_code: Any = 1
     try:
         setup_logging_pre()
