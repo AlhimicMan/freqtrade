@@ -18,7 +18,7 @@ from freqtrade.enums import SellType, SignalType
 from freqtrade.exceptions import OperationalException, StrategyError
 from freqtrade.exchange import timeframe_to_minutes, timeframe_to_seconds
 from freqtrade.exchange.exchange import timeframe_to_next_date
-from freqtrade.persistence import PairLocks, Trade
+from freqtrade.persistence import PairLocks, Trade, Order
 from freqtrade.strategy.hyper import HyperStrategyMixin
 from freqtrade.strategy.strategy_wrapper import strategy_safe_wrapper
 from freqtrade.wallets import Wallets
@@ -277,6 +277,26 @@ class IStrategy(ABC, HyperStrategyMixin):
             False aborts the process
         """
         return True
+
+    def on_order_close_request(self, order_obj: Order, **kwargs):
+        """
+        Method triggers when close order for trade sent to exchange. order may be already closed (when we have
+        market sell order).
+        :param order_obj:
+        :param kwargs:
+        :return:
+        """
+        pass
+
+    def on_order_open_request(self, order_obj: Order, **kwargs):
+        """
+        Method triggers when open order for trade sent to exchange. order may be already closed (when we have
+        market sell order).
+        :param order_obj:
+        :param kwargs:
+        :return:
+        """
+        pass
 
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:

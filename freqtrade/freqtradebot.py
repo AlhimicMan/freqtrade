@@ -575,6 +575,7 @@ class FreqtradeBot(LoggingMixin):
 
         Trade.query.session.add(trade)
         Trade.commit()
+        self.strategy.on_order_open_request(order_obj=order_obj)
 
         # Updating wallets
         self.wallets.update()
@@ -662,7 +663,7 @@ class FreqtradeBot(LoggingMixin):
                     trades_closed += 1
                     Trade.commit()
                     continue
-                # Check if we can sell our current pair
+                # Check if we can sell our current pair.
                 if trade.open_order_id is None and trade.is_open and self.handle_trade(trade):
                     trades_closed += 1
 
@@ -885,18 +886,20 @@ class FreqtradeBot(LoggingMixin):
 
             fully_cancelled = self.update_trade_state(trade, trade.open_order_id, order)
             current_ticker = self.exchange.fetch_ticker(trade.pair)
+            state_check_results = strategy_safe_wrapper(self.strategy.check_buy_order_state,
+                                                           default_retval=False)(pair=trade.pair,
+                                                                                 trade=trade,
+                                                                                 order=order,
+                                                                                 ticker=current_ticker)
             if (order['side'] == 'buy' and (order['status'] == 'open' or fully_cancelled) and (
                     fully_cancelled
                     or self._check_timed_out('buy', order)
+                    or state_check_results
                     or strategy_safe_wrapper(self.strategy.check_buy_timeout,
                                              default_retval=False)(pair=trade.pair,
                                                                    trade=trade,
                                                                    order=order)
-                    or strategy_safe_wrapper(self.strategy.check_buy_order_state,
-                                             default_retval=False)(pair=trade.pair,
-                                                                   trade=trade,
-                                                                   order=order,
-                                                                   ticker=current_ticker))):
+                    )):
                 self.handle_cancel_buy(trade, order, constants.CANCEL_REASON['TIMEOUT'])
 
             elif (order['side'] == 'sell' and (order['status'] == 'open' or fully_cancelled) and (
@@ -1125,6 +1128,7 @@ class FreqtradeBot(LoggingMixin):
         if order.get('status', 'unknown') == 'closed':
             self.update_trade_state(trade, trade.open_order_id, order)
         Trade.commit()
+        self.strategy.on_order_close_request(order_obj=order_obj)
 
         # Lock pair for one candle to prevent immediate re-buys
         self.strategy.lock_pair(trade.pair, datetime.now(timezone.utc),
