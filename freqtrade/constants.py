@@ -431,6 +431,7 @@ CANCEL_REASON = {
     "FULLY_CANCELLED": "fully cancelled",
     "ALL_CANCELLED": "cancelled (all unfilled and partially filled open orders cancelled)",
     "CANCELLED_ON_EXCHANGE": "cancelled on exchange",
+    "CANCEL_FROM_STRATEGY": "received cancellation from strategy",
     "FORCE_SELL": "forcesold",
 }
 
