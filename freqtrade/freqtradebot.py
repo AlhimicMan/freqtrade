@@ -31,7 +31,6 @@ from freqtrade.strategy.interface import IStrategy, SellCheckTuple
 from freqtrade.strategy.strategy_wrapper import strategy_safe_wrapper
 from freqtrade.wallets import Wallets
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -170,6 +169,10 @@ class FreqtradeBot(LoggingMixin):
             # Check and handle any timed out open orders
             self.check_handle_timedout()
 
+        with self._sell_lock:
+            # Check if opened order close requested from strategy
+            self.check_strategy_close_state()
+
         # Protect from collisions with forcesell.
         # Without this, freqtrade my try to recreate stoploss_on_exchange orders
         # while selling is in process, since telegram messages arrive in an different thread.
@@ -201,11 +204,11 @@ class FreqtradeBot(LoggingMixin):
         if len(open_trades) != 0:
             msg = {
                 'type': RPCMessageType.WARNING,
-                'status':  f"{len(open_trades)} open trades active.\n\n"
-                           f"Handle these trades manually on {self.exchange.name}, "
-                           f"or '/start' the bot again and use '/stopbuy' "
-                           f"to handle open trades gracefully. \n"
-                           f"{'Trades are simulated.' if self.config['dry_run'] else ''}",
+                'status': f"{len(open_trades)} open trades active.\n\n"
+                          f"Handle these trades manually on {self.exchange.name}, "
+                          f"or '/start' the bot again and use '/stopbuy' "
+                          f"to handle open trades gracefully. \n"
+                          f"{'Trades are simulated.' if self.config['dry_run'] else ''}",
             }
             self.rpc.send_msg(msg)
 
@@ -344,9 +347,9 @@ class FreqtradeBot(LoggingMixin):
             except ExchangeError:
                 logger.warning(f"Error updating {order.order_id}.")
 
-#
-# BUY / enter positions / open trades logic and methods
-#
+    #
+    # BUY / enter positions / open trades logic and methods
+    #
 
     def enter_positions(self) -> int:
         """
@@ -646,9 +649,9 @@ class FreqtradeBot(LoggingMixin):
         }
         self.rpc.send_msg(msg)
 
-#
-# SELL / exit positions / close trades logic and methods
-#
+    #
+    # SELL / exit positions / close trades logic and methods
+    #
 
     def exit_positions(self, trades: List[Any]) -> int:
         """
@@ -798,10 +801,10 @@ class FreqtradeBot(LoggingMixin):
         # Finally we check if stoploss on exchange should be moved up because of trailing.
         # Triggered Orders are now real orders - so don't replace stoploss anymore
         if (
-            stoploss_order
-            and stoploss_order.get('status_stop') != 'triggered'
-            and (self.config.get('trailing_stop', False)
-                 or self.config.get('use_custom_stoploss', False))
+                stoploss_order
+                and stoploss_order.get('status_stop') != 'triggered'
+                and (self.config.get('trailing_stop', False)
+                     or self.config.get('use_custom_stoploss', False))
         ):
             # if trailing stoploss is enabled we check if stoploss value has changed
             # in which case we cancel stoploss order and put another one with new
@@ -871,7 +874,6 @@ class FreqtradeBot(LoggingMixin):
     def check_handle_timedout(self) -> None:
         """
         Check if any orders are timed out and cancel if necessary
-        :param timeoutvalue: Number of minutes until order is considered timed out
         :return: None
         """
 
@@ -885,31 +887,47 @@ class FreqtradeBot(LoggingMixin):
                 continue
 
             fully_cancelled = self.update_trade_state(trade, trade.open_order_id, order)
-            current_ticker = self.exchange.fetch_ticker(trade.pair)
-            state_check_results = strategy_safe_wrapper(self.strategy.check_buy_order_state,
-                                                           default_retval=False)(pair=trade.pair,
-                                                                                 trade=trade,
-                                                                                 order=order,
-                                                                                 ticker=current_ticker)
+
             if (order['side'] == 'buy' and (order['status'] == 'open' or fully_cancelled) and (
                     fully_cancelled
                     or self._check_timed_out('buy', order)
-                    or state_check_results
                     or strategy_safe_wrapper(self.strategy.check_buy_timeout,
                                              default_retval=False)(pair=trade.pair,
                                                                    trade=trade,
-                                                                   order=order)
-                    )):
+                                                                   order=order))):
                 self.handle_cancel_buy(trade, order, constants.CANCEL_REASON['TIMEOUT'])
 
             elif (order['side'] == 'sell' and (order['status'] == 'open' or fully_cancelled) and (
-                  fully_cancelled
-                  or self._check_timed_out('sell', order)
-                  or strategy_safe_wrapper(self.strategy.check_sell_timeout,
-                                           default_retval=False)(pair=trade.pair,
-                                                                 trade=trade,
-                                                                 order=order))):
+                    fully_cancelled
+                    or self._check_timed_out('sell', order)
+                    or strategy_safe_wrapper(self.strategy.check_sell_timeout,
+                                             default_retval=False)(pair=trade.pair,
+                                                                   trade=trade,
+                                                                   order=order))):
                 self.handle_cancel_sell(trade, order, constants.CANCEL_REASON['TIMEOUT'])
+
+    def check_strategy_close_state(self):
+        """
+        Ask strategy check_buy_order_state() if opened trade orders must be closed
+        :return: None
+        """
+
+        for trade in Trade.get_open_order_trades():
+            try:
+                if not trade.open_order_id:
+                    continue
+                order = self.exchange.fetch_order(trade.open_order_id, trade.pair)
+            except ExchangeError:
+                logger.info('Cannot query order for %s due to %s', trade, traceback.format_exc())
+                continue
+            current_ticker = self.exchange.fetch_ticker(trade.pair)
+            if order['side'] == 'buy' and order['status'] == 'open' and \
+                    strategy_safe_wrapper(self.strategy.check_buy_order_state,
+                                          default_retval=False)(pair=trade.pair,
+                                                                trade=trade,
+                                                                order=order,
+                                                                ticker=current_ticker):
+                self.handle_cancel_buy(trade, order, constants.CANCEL_REASON['CANCEL_FROM_STRATEGY'])
 
     def cancel_all_open_orders(self) -> None:
         """
@@ -1073,7 +1091,7 @@ class FreqtradeBot(LoggingMixin):
         # if stoploss is on exchange and we are on dry_run mode,
         # we consider the sell price stop price
         if self.config['dry_run'] and sell_type == 'stoploss' \
-           and self.strategy.order_types['stoploss_on_exchange']:
+                and self.strategy.order_types['stoploss_on_exchange']:
             limit = trade.stop_loss
 
         # First cancelling stoploss on exchange ...
@@ -1224,9 +1242,9 @@ class FreqtradeBot(LoggingMixin):
         # Send the message
         self.rpc.send_msg(msg)
 
-#
-# Common update trade state methods
-#
+    #
+    # Common update trade state methods
+    #
 
     def update_trade_state(self, trade: Trade, order_id: str, action_order: Dict[str, Any] = None,
                            stoploss_order: bool = False) -> bool:
