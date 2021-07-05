@@ -17,29 +17,12 @@ from freqtrade.constants import SUPPORTED_FIAT
 logger = logging.getLogger(__name__)
 
 
-class CryptoToFiatConverter:
-    """
-    Main class to initiate Crypto to FIAT.
-    This object contains a list of pair Crypto, FIAT
-    This object is also a Singleton
-    """
+class _CurrencyConverter:
     __instance = None
     _coingekko: CoinGeckoAPI = None
 
     _cryptomap: Dict = {}
     _backoff: float = 0.0
-
-    def __new__(cls):
-        """
-        This class is a singleton - cannot be instantiated twice.
-        """
-        if CryptoToFiatConverter.__instance is None:
-            CryptoToFiatConverter.__instance = object.__new__(cls)
-            try:
-                CryptoToFiatConverter._coingekko = CoinGeckoAPI()
-            except BaseException:
-                CryptoToFiatConverter._coingekko = None
-        return CryptoToFiatConverter.__instance
 
     def __init__(self) -> None:
         # Timeout: 6h
@@ -62,12 +45,15 @@ class CryptoToFiatConverter:
             # If the request is not a 429 error we want to raise the normal error
             logger.error(
                 "Could not load FIAT Cryptocurrency map for the following problem: {}".format(
-                  request_exception
+                    request_exception
                 )
             )
         except (Exception) as exception:
             logger.error(
                 f"Could not load FIAT Cryptocurrency map for the following problem: {exception}")
+
+    def get_price(self, crypto_symbol: str, fiat_symbol: str) -> float:
+        raise NotImplementedError()
 
     def convert_amount(self, crypto_amount: float, crypto_symbol: str, fiat_symbol: str) -> float:
         """
@@ -81,43 +67,6 @@ class CryptoToFiatConverter:
             return float(crypto_amount)
         price = self.get_price(crypto_symbol=crypto_symbol, fiat_symbol=fiat_symbol)
         return float(crypto_amount) * float(price)
-
-    def get_price(self, crypto_symbol: str, fiat_symbol: str) -> float:
-        """
-        Return the price of the Crypto-currency in Fiat
-        :param crypto_symbol: Crypto-currency you want to convert (e.g BTC)
-        :param fiat_symbol: FIAT currency you want to convert to (e.g USD)
-        :return: Price in FIAT
-        """
-        crypto_symbol = crypto_symbol.lower()
-        fiat_symbol = fiat_symbol.lower()
-        inverse = False
-
-        if crypto_symbol == 'usd':
-            # usd corresponds to "uniswap-state-dollar" for coingecko.
-            # We'll therefore need to "swap" the currencies
-            logger.info(f"reversing Rates {crypto_symbol}, {fiat_symbol}")
-            crypto_symbol = fiat_symbol
-            fiat_symbol = 'usd'
-            inverse = True
-
-        symbol = f"{crypto_symbol}/{fiat_symbol}"
-        # Check if the fiat conversion you want is supported
-        if not self._is_supported_fiat(fiat=fiat_symbol):
-            raise ValueError(f'The fiat {fiat_symbol} is not supported.')
-
-        price = self._pair_price.get(symbol, None)
-
-        if not price:
-            price = self._find_price(
-                crypto_symbol=crypto_symbol,
-                fiat_symbol=fiat_symbol
-            )
-            if inverse and price != 0.0:
-                price = 1 / price
-            self._pair_price[symbol] = price
-
-        return price
 
     def _is_supported_fiat(self, fiat: str) -> bool:
         """
@@ -168,3 +117,120 @@ class CryptoToFiatConverter:
         except Exception as exception:
             logger.error("Error in _find_price: %s", exception)
             return 0.0
+
+
+class CryptoToFiatConverter(_CurrencyConverter):
+    """
+    Main class to initiate Crypto to FIAT.
+    This object contains a list of pair Crypto, FIAT
+    This object is also a Singleton
+    """
+    __instance = None
+    _coingekko: CoinGeckoAPI = None
+
+    _cryptomap: Dict = {}
+    _backoff: float = 0.0
+
+    def __new__(cls):
+        """
+        This class is a singleton - cannot be instantiated twice.
+        """
+        if CryptoToFiatConverter.__instance is None:
+            CryptoToFiatConverter.__instance = object.__new__(cls)
+            try:
+                CryptoToFiatConverter._coingekko = CoinGeckoAPI()
+            except BaseException:
+                CryptoToFiatConverter._coingekko = None
+        return CryptoToFiatConverter.__instance
+
+    def get_price(self, crypto_symbol: str, fiat_symbol: str) -> float:
+        """
+        Return the price of the Crypto-currency in Fiat
+        :param crypto_symbol: Crypto-currency you want to convert (e.g BTC)
+        :param fiat_symbol: FIAT currency you want to convert to (e.g USD)
+        :return: Price in FIAT
+        """
+        crypto_symbol = crypto_symbol.lower()
+        fiat_symbol = fiat_symbol.lower()
+        inverse = False
+
+        if crypto_symbol == 'usd':
+            # usd corresponds to "uniswap-state-dollar" for coingecko.
+            # We'll therefore need to "swap" the currencies
+            logger.info(f"reversing Rates {crypto_symbol}, {fiat_symbol}")
+            crypto_symbol = fiat_symbol
+            fiat_symbol = 'usd'
+            inverse = True
+
+        symbol = f"{crypto_symbol}/{fiat_symbol}"
+        # Check if the fiat conversion you want is supported
+        if not self._is_supported_fiat(fiat=fiat_symbol):
+            raise ValueError(f'The fiat {fiat_symbol} is not supported.')
+
+        price = self._pair_price.get(symbol, None)
+
+        if not price:
+            price = self._find_price(
+                crypto_symbol=crypto_symbol,
+                fiat_symbol=fiat_symbol
+            )
+            if inverse and price != 0.0:
+                price = 1 / price
+            self._pair_price[symbol] = price
+
+        return price
+
+
+class FiatToCryptoConverter(_CurrencyConverter):
+    """
+    Main class to initiate FIAT to Crypto.
+    This object contains a list of pair Crypto, FIAT
+    This object is also a Singleton
+    """
+    __instance = None
+    _coingekko: CoinGeckoAPI = None
+
+    _cryptomap: Dict = {}
+    _backoff: float = 0.0
+
+    def __new__(cls):
+        """
+        This class is a singleton - cannot be instantiated twice.
+        """
+        if FiatToCryptoConverter.__instance is None:
+            FiatToCryptoConverter.__instance = object.__new__(cls)
+            try:
+                FiatToCryptoConverter._coingekko = CoinGeckoAPI()
+            except BaseException:
+                FiatToCryptoConverter._coingekko = None
+        return FiatToCryptoConverter.__instance
+
+    def get_price(self, crypto_symbol: str, fiat_symbol: str) -> float:
+        """
+        Return the price of the Crypto-currency in Fiat
+        :param crypto_symbol: Crypto-currency you want to convert (e.g BTC)
+        :param fiat_symbol: FIAT currency you want to convert to (e.g USD)
+        :return: Price in FIAT
+        """
+        crypto_symbol = crypto_symbol.lower()
+        fiat_symbol = fiat_symbol.lower()
+
+        symbol = f"{crypto_symbol}/{fiat_symbol}"
+        inversed_symbol = f"{fiat_symbol}/{crypto_symbol}"
+        # Check if the fiat conversion you want is supported
+        if not self._is_supported_fiat(fiat=fiat_symbol):
+            raise ValueError(f'The fiat {fiat_symbol} is not supported.')
+
+        price = self._pair_price.get(symbol, None)
+
+        if not price:
+            price = self._find_price(
+                crypto_symbol=crypto_symbol,
+                fiat_symbol=fiat_symbol
+            )
+            if price == 0.0:
+                return 0
+            price = 1 / price
+            self._pair_price[inversed_symbol] = price
+
+        return price
