@@ -162,6 +162,9 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         return dataframe
 
+    def get_strategy_calculated_amount(self, pair: str) -> Optional[float]:
+        return None
+
     def check_buy_timeout(self, pair: str, trade: Trade, order: dict, **kwargs) -> bool:
         """
         Check buy timeout function callback.
