@@ -91,6 +91,7 @@ class IResolver:
         logger.debug(f"Searching for {cls.object_type.__name__} {object_name} in '{directory}'")
         for entry in directory.iterdir():
             # Only consider python files
+            logger.debug(entry)
             if not str(entry).endswith('.py'):
                 logger.debug('Ignoring %s', entry)
                 continue
@@ -100,7 +101,6 @@ class IResolver:
             module_path = entry.resolve()
 
             obj = next(cls._get_valid_object(module_path, object_name), None)
-
             if obj:
                 obj[0].__file__ = str(entry)
                 if add_source:
@@ -125,7 +125,8 @@ class IResolver:
                         f"Using resolved {cls.object_type.__name__.lower()[1:]} {object_name} "
                         f"from '{module_path}'...")
                     return module(**kwargs)
-            except FileNotFoundError:
+            except FileNotFoundError as err:
+                logger.debug(f"Error loading: {err}")
                 logger.warning('Path "%s" does not exist.', _path.resolve())
 
         return None

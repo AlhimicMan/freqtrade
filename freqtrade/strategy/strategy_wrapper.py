@@ -14,7 +14,8 @@ def strategy_safe_wrapper(f, message: str = "", default_retval=None, supress_err
     """
     def wrapper(*args, **kwargs):
         try:
-            return f(*args, **kwargs)
+            execute_result = f(*args, **kwargs)
+            return execute_result
         except ValueError as error:
             logger.warning(
                 f"{message}"
