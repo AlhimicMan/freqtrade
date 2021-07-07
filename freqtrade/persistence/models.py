@@ -62,6 +62,7 @@ def init_db(db_url: str, clean_open_orders: bool = False) -> None:
     Trade.query = Trade._session.query_property()
     Order.query = Trade._session.query_property()
     PairLock.query = Trade._session.query_property()
+    LogEvent.query = Trade._session.query_property()
 
     previous_tables = inspect(engine).get_table_names()
     _DECL_BASE.metadata.create_all(engine)
@@ -907,3 +908,34 @@ class PairLock(_DECL_BASE):
             'reason': self.reason,
             'active': self.active,
         }
+
+
+class LogEvent(_DECL_BASE):
+    """
+    Custom log record for storing in DB
+    """
+    __tablename__ = 'logevents'
+    id = Column(Integer, primary_key=True)
+    event_date = Column(DateTime, nullable=True, default=datetime.utcnow)
+    order_id = Column(String(255), nullable=False)
+    pair = Column(String(25), nullable=False)
+    stake_currency = Column(String(25), nullable=False)
+    market_price = Column(Float)
+    order_side = Column(String(25), nullable=False)
+    order_for_trade = Column(String(25), nullable=False)
+    order_price = Column(Float)
+    quantity = Column(Float)
+    fee = Column(Float)
+    total_cost = Column(Float)
+    total_cost_usd = Column(Float)
+    open_range = Column(Float, default=0)
+    open_threshold = Column(Float, default=0)
+    open_amount = Column(Float, default=0)
+    parent_order_id = Column(String(255), nullable=False, default="")
+
+    @staticmethod
+    def commit():
+        LogEvent.query.session.commit()
+
+    def save(self):
+        Trade.query.session.add(self)

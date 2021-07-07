@@ -11,6 +11,7 @@ ENV FT_APP_ENV="docker"
 COPY --chown=ftuser:ftuser . /freqtrade
 WORKDIR /freqtrade
 
+RUN pip install -r /freqtrade/requirements.txt
 RUN pip install -e . --user --no-cache-dir --no-build-isolation \
   && freqtrade install-ui
 
