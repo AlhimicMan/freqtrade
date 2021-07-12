@@ -91,7 +91,6 @@ class IResolver:
         logger.debug(f"Searching for {cls.object_type.__name__} {object_name} in '{directory}'")
         for entry in directory.iterdir():
             # Only consider python files
-            logger.debug(entry)
             if not str(entry).endswith('.py'):
                 logger.debug('Ignoring %s', entry)
                 continue
