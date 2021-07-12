@@ -301,6 +301,35 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         pass
 
+    def on_order_cancelled(self, order_obj: Order, **kwargs):
+        """
+        Method triggers when trade opened and not filled order cancelled.
+        :param order_obj:
+        :param kwargs:
+        :return:
+        """
+        pass
+
+    def on_received_order_status_changed(self, order_obj: Order, new_order: dict, **kwargs):
+        """
+        Triggers when order status changed received form exchange and not handled in other methods.
+        Triggers before changes added to order_obj
+        :param order_obj:
+        :param new_order: received on change CCXT object
+        :param kwargs:
+        :return:
+        """
+        pass
+
+    def on_received_order_exchange_cancelled(self, order_obj: Order, **kwargs):
+        """
+        Triggers when received form exchange order status is in cancelled
+        :param order_obj:
+        :param kwargs:
+        :return:
+        """
+        pass
+
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
         """

@@ -636,6 +636,8 @@ class FreqtradeBot(LoggingMixin):
 
         # Send the message
         self.rpc.send_msg(msg)
+        order_obj = trade.orders[-1]
+        self.strategy.on_order_cancelled(order_obj)
 
     def _notify_buy_fill(self, trade: Trade) -> None:
         msg = {
@@ -1273,6 +1275,15 @@ class FreqtradeBot(LoggingMixin):
             logger.warning('Unable to fetch order %s: %s', order_id, exception)
             return False
 
+        # Original trade order object. Here we use than to pass in log events
+        oobj: Optional[Order] = None
+        # Create log record if order status changed
+        filtered_orders = [o for o in trade.orders if o.order_id == order.get('id')]
+        if filtered_orders:
+            oobj = filtered_orders[0]
+            if oobj.status != order.get('status', oobj.status):
+                self.strategy.on_received_order_status_changed(oobj, order)
+
         trade.update_order(order)
 
         # Try update amount (binance-fix)
@@ -1287,6 +1298,7 @@ class FreqtradeBot(LoggingMixin):
             logger.warning("Could not update trade amount: %s", exception)
 
         if self.exchange.check_order_canceled_empty(order):
+            self.strategy.on_received_order_exchange_cancelled(oobj)
             # Trade has been cancelled on exchange
             # Handling of this will happen in check_handle_timeout.
             return True

@@ -922,7 +922,7 @@ class LogEvent(_DECL_BASE):
     stake_currency = Column(String(25), nullable=False)
     market_price = Column(Float)
     order_side = Column(String(25), nullable=False)
-    order_for_trade = Column(String(25), nullable=False)
+    order_for_trade = Column(String(25), nullable=False)  # Order type
     order_price = Column(Float)
     quantity = Column(Float)
     fee = Column(Float)
@@ -931,6 +931,7 @@ class LogEvent(_DECL_BASE):
     open_range = Column(Float, default=0)
     open_threshold = Column(Float, default=0)
     open_amount = Column(Float, default=0)
+    order_status = Column(String(25), nullable=False)
     parent_order_id = Column(String(255), nullable=False, default="")
 
     @staticmethod
