@@ -67,7 +67,10 @@ class FreqtradeBot(LoggingMixin):
 
         self.wallets = Wallets(self.config, self.exchange)
 
-        PairLocks.timeframe = self.config['timeframe']
+        pairlocl_timeframe = self.config.get("lock_timeframe")
+        if pairlocl_timeframe is None:
+            pairlocl_timeframe = self.config['timeframe']
+        PairLocks.timeframe = pairlocl_timeframe
 
         self.protections = ProtectionManager(self.config, self.strategy.protections)
 
