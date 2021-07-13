@@ -321,15 +321,6 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         pass
 
-    def on_received_order_exchange_cancelled(self, order_obj: Order, **kwargs):
-        """
-        Triggers when received form exchange order status is in cancelled
-        :param order_obj:
-        :param kwargs:
-        :return:
-        """
-        pass
-
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
         """

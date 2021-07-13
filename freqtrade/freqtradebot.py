@@ -1298,7 +1298,6 @@ class FreqtradeBot(LoggingMixin):
             logger.warning("Could not update trade amount: %s", exception)
 
         if self.exchange.check_order_canceled_empty(order):
-            self.strategy.on_received_order_exchange_cancelled(oobj)
             # Trade has been cancelled on exchange
             # Handling of this will happen in check_handle_timeout.
             return True
