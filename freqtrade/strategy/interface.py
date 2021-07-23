@@ -574,6 +574,9 @@ class IStrategy(ABC, HyperStrategyMixin):
         """
         latest_date = dataframe['date'].max()
         latest = self.get_latest_timeframe_data(pair, timeframe, dataframe)
+        if latest is None:
+            logger.error("Latest dataframe is None, don't buy and sell")
+            return False, False
         (buy, sell) = latest[SignalType.BUY.value] == 1, latest[SignalType.SELL.value] == 1
         logger.debug('trigger: %s (pair=%s) buy=%s sell=%s',
                      latest['date'], pair, str(buy), str(sell))
